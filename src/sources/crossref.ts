@@ -1,5 +1,5 @@
 import type { Paper, Source, SourceContext } from "../types";
-import { getJson, normalizeDoi, plainText, yearOf } from "../util";
+import { fixCaps, getJson, normalizeDoi, plainText, yearOf } from "../util";
 
 const BASE = "https://api.crossref.org";
 const SELECT = "DOI,title,author,issued,container-title,abstract,URL,type";
@@ -12,7 +12,7 @@ export function fromCrossref(w: any): Paper | null {
   const title = plainText(Array.isArray(w?.title) ? w.title[0] : w?.title);
   if (!title) return null;
   const authors = (w.author ?? [])
-    .map((a: any) => plainText(a.given ? `${a.given} ${a.family ?? ""}` : a.family ?? a.name ?? ""))
+    .map((a: any) => fixCaps(plainText(a.given ? `${a.given} ${a.family ?? ""}` : a.family ?? a.name ?? "")))
     .filter(Boolean);
   const doi = normalizeDoi(w.DOI);
   return {

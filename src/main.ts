@@ -94,10 +94,10 @@ export default class PaperFinderPlugin extends Plugin {
     return { http: obsidianHttp, mailto: s.mailto, openalexKey: s.openalexKey, s2Key: s.s2Key, limit: s.resultsPerSource };
   }
 
-  search(query: string): Promise<SearchResult> {
+  search(query: string, isCancelled?: () => boolean): Promise<SearchResult> {
     const enabled = (Object.keys(this.settings.sources) as SourceId[]).filter((k) => this.settings.sources[k]);
     if (!enabled.length) return Promise.reject(new Error("No sources are enabled in the settings"));
-    return findPapers(query, enabled, this.ctx());
+    return findPapers(query, enabled, { ...this.ctx(), isCancelled }, this.settings.yearMode);
   }
 
   private fm(file: TFile): Record<string, unknown> | undefined {
@@ -135,11 +135,11 @@ export default class PaperFinderPlugin extends Plugin {
 
   private async noteTemplate(): Promise<string> {
     const path = this.settings.templatePath;
-    if (!path) return DEFAULT_NOTE_TEMPLATE;
+    if (!path) return this.settings.templateText.trim() ? this.settings.templateText : DEFAULT_NOTE_TEMPLATE;
     const file = this.app.vault.getAbstractFileByPath(normalizePath(path.endsWith(".md") ? path : `${path}.md`));
     if (!(file instanceof TFile)) {
-      new Notice(`Paper Finder: template "${path}" not found, using the built-in template.`);
-      return DEFAULT_NOTE_TEMPLATE;
+      new Notice(`Paper Finder: template "${path}" not found; not creating the note.`);
+      throw new Error(`template "${path}" not found`);
     }
     return this.app.vault.cachedRead(file);
   }

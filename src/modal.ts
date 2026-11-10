@@ -19,8 +19,10 @@ export class FindPaperModal extends Modal {
   private selected = 0;
   private seq = 0;
   private timer: number | null = null;
-  private lastQuery = "";
-  private busy = false;
+  /** Query whose results are currently shown. */
+  private shownQuery = "";
+  /** Query currently being searched, if any. */
+  private runningQuery = "";
 
   constructor(app: App, private plugin: PaperFinderPlugin, private initial = "") {
     super(app);
@@ -77,32 +79,34 @@ export class FindPaperModal extends Modal {
     } else if (e.key === "Enter") {
       e.preventDefault();
       const q = this.input.value.trim();
-      if (q !== this.lastQuery || !this.papers.length) {
+      if (q === this.shownQuery && this.papers.length) void this.choose(this.selected);
+      else if (q !== this.runningQuery) {
         if (this.timer !== null) window.clearTimeout(this.timer);
         void this.run();
-      } else {
-        void this.choose(this.selected);
-      }
+      } // else: that search is already running; its results will appear shortly.
     }
   }
 
   private async run(): Promise<void> {
     const q = this.input.value.trim();
     if (!q) return;
+    if (q === this.runningQuery) return;
     const my = ++this.seq;
-    this.lastQuery = q;
-    this.busy = true;
+    this.runningQuery = q;
     this.setStatus("Searching…");
     let res: SearchResult;
     try {
-      res = await this.plugin.search(q);
+      res = await this.plugin.search(q, () => my !== this.seq);
     } catch (e) {
-      if (my === this.seq) this.setStatus(`Search failed: ${e instanceof Error ? e.message : String(e)}`);
+      if (my === this.seq) {
+        this.runningQuery = "";
+        this.setStatus(`Search failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
       return;
-    } finally {
-      if (my === this.seq) this.busy = false;
     }
     if (my !== this.seq) return; // superseded by a newer search
+    this.runningQuery = "";
+    this.shownQuery = q;
     this.papers = res.papers;
     this.existing = res.papers.map((p) => this.plugin.findExisting(p));
     const parts = res.status.map((s) => `${SOURCE_LABELS[s.source]} ${s.error ? "failed" : s.count}`);
@@ -143,7 +147,7 @@ export class FindPaperModal extends Modal {
 
   private async choose(i: number): Promise<void> {
     const p = this.papers[i];
-    if (!p || this.busy) return;
+    if (!p) return;
     this.close();
     await this.plugin.saveAndOpen(p, this.existing[i]);
   }

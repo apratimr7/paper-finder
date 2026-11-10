@@ -65,6 +65,11 @@ export function lastName(name: string): string {
   return parts.slice(i).join(" ");
 }
 
+/** Some publishers deposit names in capitals ("JUAN MALDACENA"); turn those into "Juan Maldacena". */
+export function fixCaps(name: string): string {
+  return name.replace(/\p{Lu}[\p{Lu}'’-]+/gu, (w) => (w.length > 1 ? w[0] + w.slice(1).toLowerCase() : w));
+}
+
 /** "Maldacena", "Maldacena and Witten", "Maldacena et al." */
 export function authorsShort(authors: string[]): string {
   if (authors.length === 0) return "Anonymous";

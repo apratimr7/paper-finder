@@ -36,7 +36,8 @@ export function parseArxivAtom(xml: string): Paper[] {
     out.push({
       title,
       authors,
-      year: yearOf(tag(e, "published")),
+      year: journal ? yearOf(journal.match(/\((\d{4})\)/)?.[1] ?? journal) : undefined,
+      firstYear: yearOf(tag(e, "published")),
       venue: journal || "arXiv",
       abstract: plainText(tag(e, "summary")) || undefined,
       doi,
@@ -66,7 +67,9 @@ export const arxiv: Source = {
   async search(query, ctx: SourceContext) {
     const sq = arxivQuery(query);
     if (!sq) return [];
+    if (ctx.isCancelled?.()) return [];
     await throttle();
+    if (ctx.isCancelled?.()) return [];
     const xml = await getText(ctx.http, `${BASE}?search_query=${encodeURIComponent(sq)}&start=0&max_results=${ctx.limit}`);
     return xml ? parseArxivAtom(xml) : [];
   },

@@ -15,7 +15,8 @@ export function fromInspire(hit: any): Paper | null {
   return {
     title,
     authors: (m.authors ?? []).map((a: any) => firstLast(a?.full_name ?? "")).filter(Boolean),
-    year: yearOf(m.earliest_date) ?? yearOf(m.preprint_date) ?? yearOf(pub.year),
+    year: yearOf(pub.year),
+    firstYear: yearOf(m.earliest_date) ?? yearOf(m.preprint_date),
     venue: plainText(venue) || undefined,
     abstract: plainText(abstract) || undefined,
     doi: normalizeDoi(m.dois?.[0]?.value),

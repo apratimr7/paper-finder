@@ -3,7 +3,10 @@ export interface Paper {
   title: string;
   /** Full names in "First Last" order. */
   authors: string[];
+  /** Year of the journal publication when known, otherwise of the record. */
   year?: string;
+  /** Year the work first appeared (e.g. on arXiv), when a source reports it. */
+  firstYear?: string;
   venue?: string;
   abstract?: string;
   /** Lower-case DOI without any resolver prefix, e.g. "10.1103/physrevd.101.084046". */
@@ -21,6 +24,8 @@ export interface Paper {
   sources: SourceId[];
   /** Internal ranking score, higher is better. */
   score?: number;
+  /** Internal: which source supplied title / doi / year after merging. */
+  fieldSrc?: Partial<Record<"title" | "doi" | "year", SourceId>>;
 }
 
 export type SourceId = "openalex" | "arxiv" | "inspire" | "crossref" | "semanticscholar";
@@ -50,6 +55,8 @@ export interface SourceContext {
   /** Optional Semantic Scholar API key. */
   s2Key: string;
   limit: number;
+  /** Lets slow or throttled sources skip work for a search that has been superseded. */
+  isCancelled?: () => boolean;
 }
 
 export interface Source {

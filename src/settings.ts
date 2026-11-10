@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { ALL_LINK_KINDS, LINK_LABELS, type LinkKind } from "./links";
-import { PLACEHOLDER_HELP } from "./note";
+import { DEFAULT_NOTE_TEMPLATE, PLACEHOLDER_HELP } from "./note";
+import type { YearMode } from "./search";
 import { SOURCE_LABELS, type SourceId } from "./types";
 import type PaperFinderPlugin from "./main";
 
@@ -10,6 +11,7 @@ export interface PaperFinderSettings {
   folder: string;
   filenameTemplate: string;
   templatePath: string;
+  templateText: string;
   citeTemplate: string;
   sources: Record<SourceId, boolean>;
   noteLinkOrder: LinkKind[];
@@ -17,6 +19,7 @@ export interface PaperFinderSettings {
   openMode: OpenMode;
   openLinkAfterCreate: boolean;
   openNoteAfterCreate: boolean;
+  yearMode: YearMode;
   searchAsYouType: boolean;
   debounceMs: number;
   resultsPerSource: number;
@@ -30,6 +33,7 @@ export const DEFAULT_SETTINGS: PaperFinderSettings = {
   folder: "Papers",
   filenameTemplate: "{{author}} {{year}} - {{title}}",
   templatePath: "",
+  templateText: "",
   citeTemplate: "[[{{link}}|{{authorsShort}} {{year}}]]",
   sources: { openalex: true, arxiv: true, inspire: true, crossref: true, semanticscholar: false },
   noteLinkOrder: ["doi", "arxiv-abs", "publisher", "inspire", "openalex"],
@@ -37,6 +41,7 @@ export const DEFAULT_SETTINGS: PaperFinderSettings = {
   openMode: "webviewer",
   openLinkAfterCreate: true,
   openNoteAfterCreate: true,
+  yearMode: "published",
   searchAsYouType: true,
   debounceMs: 800,
   resultsPerSource: 8,
@@ -90,6 +95,30 @@ export class PaperFinderSettingTab extends PluginSettingTab {
         this.s.templatePath = v.trim();
         await this.save();
       }));
+
+    new Setting(containerEl)
+      .setName("Year")
+      .setDesc("Which year {{year}} means when they differ, e.g. a 1997 arXiv preprint published in 1999. Falls back to the other when only one is known.")
+      .addDropdown((d) => d
+        .addOptions({ published: "Journal publication year", first: "Year it first appeared (preprint)" })
+        .setValue(this.s.yearMode)
+        .onChange(async (v) => {
+          this.s.yearMode = v as YearMode;
+          await this.save();
+        }));
+
+    const tpl = new Setting(containerEl)
+      .setName("Template text")
+      .setDesc("Used when no template note is set. Leave empty for the built-in template shown as placeholder.");
+    tpl.settingEl.addClass("paper-finder-template-setting");
+    tpl.addTextArea((t) => {
+      t.setPlaceholder(DEFAULT_NOTE_TEMPLATE).setValue(this.s.templateText).onChange(async (v) => {
+        this.s.templateText = v;
+        await this.save();
+      });
+      t.inputEl.rows = 14;
+      t.inputEl.addClass("paper-finder-template-text");
+    });
 
     new Setting(containerEl).setName("Sources").setHeading();
     for (const id of Object.keys(SOURCE_LABELS) as SourceId[]) {

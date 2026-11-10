@@ -5,7 +5,7 @@ import { inspire } from "./sources/inspire";
 import { openalex } from "./sources/openalex";
 import { semanticscholar } from "./sources/semanticscholar";
 import type { Paper, Source, SourceContext, SourceId } from "./types";
-import { getText } from "./util";
+import { fixCaps, getText } from "./util";
 
 export const ALL_SOURCES: Record<SourceId, Source> = { openalex, arxiv, inspire, crossref, semanticscholar };
 
@@ -41,11 +41,37 @@ function venueRank(p: Paper): number {
   return VENUE_PRIORITY.indexOf(p.sources[0]);
 }
 
-/** Fill the gaps in `into` from `from`. The first source to report a field wins, except where noted. */
+// For each field, which source is trusted most. This makes the merged record (and so the file name,
+// citekey and link) the same however the paper was found.
+const FIELD_PRIORITY: Record<"title" | "doi" | "year", SourceId[]> = {
+  // Published titles; arXiv/INSPIRE titles often carry raw LaTeX ("Large $N$").
+  title: ["crossref", "openalex", "semanticscholar", "arxiv", "inspire"],
+  // INSPIRE curates the DOI of the original journal article; OpenAlex sometimes picks a reprint.
+  doi: ["inspire", "crossref", "arxiv", "semanticscholar", "openalex"],
+  year: ["crossref", "inspire", "openalex", "semanticscholar", "arxiv"],
+};
+
+function take(into: Paper, from: Paper, field: "title" | "doi" | "year"): void {
+  const src = from.fieldSrc?.[field] ?? from.sources[0];
+  const value = from[field];
+  if (!value) return;
+  const cur = into.fieldSrc?.[field];
+  const pr = FIELD_PRIORITY[field];
+  if (!into[field] || cur === undefined || pr.indexOf(src) < pr.indexOf(cur)) {
+    into[field] = value;
+    (into.fieldSrc ??= {})[field] = src;
+  }
+}
+
+const minYear = (a?: string, b?: string) => (a && b ? (a < b ? a : b) : a ?? b);
+
+/** Fill the gaps in `into` from `from`, using FIELD_PRIORITY where sources disagree. */
 function mergeInto(into: Paper, from: Paper): void {
-  into.doi ??= from.doi;
+  take(into, from, "title");
+  take(into, from, "doi");
+  take(into, from, "year");
+  into.firstYear = minYear(minYear(into.firstYear, from.firstYear), minYear(into.year, from.year));
   into.arxiv ??= from.arxiv;
-  into.year ??= from.year;
   if (from.venue && venueRank(from) < venueRank(into)) into.venue = from.venue;
   if (!into.abstract || (from.abstract && from.abstract.length > into.abstract.length * 1.5)) into.abstract = from.abstract ?? into.abstract;
   if (from.authors.length > into.authors.length) into.authors = from.authors;
@@ -71,11 +97,20 @@ export function mergeResults(lists: Paper[][], queryYear?: string): Paper[] {
         mergeInto(hit, p);
         hit.score = (hit.score ?? 0) + rrf;
       } else {
-        merged.push({ ...p, authors: [...p.authors], sources: [...p.sources], score: rrf });
+        const src = p.sources[0];
+        merged.push({
+          ...p,
+          authors: [...p.authors],
+          sources: [...p.sources],
+          score: rrf,
+          firstYear: minYear(p.firstYear, p.year),
+          fieldSrc: { title: src, doi: p.doi ? src : undefined, year: p.year ? src : undefined },
+        });
       }
     });
   }
-  if (queryYear) for (const m of merged) if (m.year === queryYear) m.score = (m.score ?? 0) + 0.15;
+  for (const m of merged) m.authors = m.authors.map(fixCaps);
+  if (queryYear) for (const m of merged) if (m.year === queryYear || m.firstYear === queryYear) m.score = (m.score ?? 0) + 0.15;
   return merged.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
@@ -99,15 +134,43 @@ async function lookupBy(
     .map((s) => settle(s.id, (kind === "doi" ? s.byDoi! : s.byArxiv!).call(s, id, ctx)));
   const done = await Promise.all(runs);
   const lists = done.map((d) => (d.value ? [d.value] : []));
+  // Crossref has no arXiv lookup, but once the DOI is known its published title and year are
+  // fetched too, so a paper gets the same metadata whether found by arXiv id or by DOI.
+  const doiFound = kind === "arxiv" ? mergeResults(lists)[0]?.doi : undefined;
+  if (doiFound && enabled.includes("crossref")) {
+    const c = await settle("crossref", crossref.byDoi!(doiFound, ctx));
+    if (c.value) lists.push([c.value]);
+    done.push(c);
+  }
+  const papers = mergeResults(lists);
+  // The identifier the user gave always wins over what a source reports.
+  if (papers[0]) {
+    if (kind === "doi") papers[0].doi = id;
+    else papers[0].arxiv = id;
+  }
   return {
     mode: "lookup",
-    papers: mergeResults(lists),
+    papers,
     status: done.map((d) => ({ source: d.source, count: d.value ? 1 : 0, error: d.error })),
   };
 }
 
-/** Entry point: detect the input type, then either look up an identifier or fuzzy-search. */
-export async function findPapers(input: string, enabled: SourceId[], ctx: SourceContext): Promise<SearchResult> {
+export type YearMode = "published" | "first";
+
+/**
+ * Entry point: detect the input type, then either look up an identifier or fuzzy-search.
+ * `yearMode` picks which year ends up in `year`: the journal publication year, or the year the
+ * work first appeared (usually its arXiv submission). Either falls back to the other.
+ */
+export async function findPapers(input: string, enabled: SourceId[], ctx: SourceContext, yearMode: YearMode = "published"): Promise<SearchResult> {
+  const res = await dispatch(input, enabled, ctx);
+  for (const p of res.papers) {
+    p.year = yearMode === "first" ? p.firstYear ?? p.year : p.year ?? p.firstYear;
+  }
+  return res;
+}
+
+async function dispatch(input: string, enabled: SourceId[], ctx: SourceContext): Promise<SearchResult> {
   const parsed = parseInput(input);
   switch (parsed.kind) {
     case "doi":

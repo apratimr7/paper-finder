@@ -4,3 +4,4 @@ test/dist/
 data.json
 *.log
 .DS_Store
+vault-preset/
