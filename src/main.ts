@@ -266,7 +266,8 @@ class CitePickerModal extends FuzzySuggestModal<TFile> {
 
   getItems(): TFile[] {
     // Static part of the folder setting, before any placeholder.
-    const root = normalizePath(this.plugin.settings.folder.split("{{")[0].replace(/\/+$/, "") || "/");
+    const s = this.plugin.settings;
+    const root = normalizePath((s.citeFolder || s.folder).split("{{")[0].replace(/\/+$/, "") || "/");
     const files = this.app.vault.getMarkdownFiles();
     return root === "/" ? files : files.filter((f) => f.path.startsWith(`${root}/`));
   }

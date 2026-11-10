@@ -13,6 +13,7 @@ export interface PaperFinderSettings {
   templatePath: string;
   templateText: string;
   citeTemplate: string;
+  citeFolder: string;
   sources: Record<SourceId, boolean>;
   noteLinkOrder: LinkKind[];
   openLinkOrder: LinkKind[];
@@ -35,6 +36,7 @@ export const DEFAULT_SETTINGS: PaperFinderSettings = {
   templatePath: "",
   templateText: "",
   citeTemplate: "[[{{link}}|{{authorsShort}} {{year}}]]",
+  citeFolder: "",
   sources: { openalex: true, arxiv: true, inspire: true, crossref: true, semanticscholar: false },
   noteLinkOrder: ["doi", "arxiv-abs", "publisher", "inspire", "openalex"],
   openLinkOrder: ["arxiv-html", "ar5iv", "doi", "publisher"],
@@ -200,6 +202,14 @@ export class PaperFinderSettingTab extends PluginSettingTab {
       .setDesc("Inserted by the Cite paper command. {{link}} is the link to the source note; other placeholders come from its properties.")
       .addText((t) => t.setPlaceholder(DEFAULT_SETTINGS.citeTemplate).setValue(this.s.citeTemplate).onChange(async (v) => {
         this.s.citeTemplate = v || DEFAULT_SETTINGS.citeTemplate;
+        await this.save();
+      }));
+
+    new Setting(containerEl)
+      .setName("Cite from folder")
+      .setDesc("Source notes offered by Cite paper. Leave empty to use the folder for new notes; use / for the whole vault.")
+      .addText((t) => t.setPlaceholder("same as new notes").setValue(this.s.citeFolder).onChange(async (v) => {
+        this.s.citeFolder = v.trim();
         await this.save();
       }));
 

@@ -39,6 +39,7 @@ Everything that is specific to one vault can be configured.
 - **Note template**: a path to a note in your vault, or **Template text** written directly in the settings. If both are empty, the built-in metadata-only template is used.
 - **Link saved in the note** and **Link opened for reading**: two separate, reorderable precedence lists. Link types: arXiv HTML, ar5iv, arXiv abstract, arXiv PDF, DOI, publisher page, open-access PDF, INSPIRE, OpenAlex, Semantic Scholar. arXiv HTML and ar5iv are checked to exist before they're used.
 - **Open links in**: web viewer in a split, web viewer in a new tab, or the system browser. On mobile and without the core Web viewer plugin, the system browser is always used.
+- **Cite from folder**: which notes the Cite command offers (default: the folder for new notes; `/` for the whole vault).
 - **Property names**: the frontmatter keys your template uses for title, authors, year, DOI, arXiv id and link. They're used to detect papers already in the vault, to cite, and to open links.
 - **Optional API access**: a contact e-mail for OpenAlex and Crossref's "polite pool", and API keys for OpenAlex and Semantic Scholar. All of these are empty by default, and nothing identifying is sent unless you add it.
 
