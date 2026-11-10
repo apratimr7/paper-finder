@@ -1,0 +1,10 @@
+{
+  "id": "paper-finder",
+  "name": "Paper Finder",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "Find research papers from scraps of information (fuzzy text, DOI, arXiv ID or URL) across OpenAlex, arXiv, INSPIRE-HEP, Crossref and Semantic Scholar, and save them as metadata-only source notes.",
+  "author": "Apratim Rastogi",
+  "authorUrl": "https://github.com/apratimr7",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,21 @@
+{
+  "name": "paper-finder",
+  "version": "0.1.0",
+  "description": "Find research papers from scraps of information and save them as metadata-only source notes in Obsidian.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test:live": "node esbuild.config.mjs test && node test/live.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "obsidian": "1.14.4",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "@types/estree": "1.0.9"
+  }
+}

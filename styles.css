@@ -1,0 +1,13 @@
+.paper-finder-modal { width: min(820px, 92vw); }
+.paper-finder-input { width: 100%; font-size: var(--font-ui-medium); padding: var(--size-4-2) var(--size-4-3); }
+.paper-finder-status { color: var(--text-muted); font-size: var(--font-ui-smaller); margin: var(--size-4-2) 0; min-height: 1.4em; }
+.paper-finder-results { max-height: 60vh; overflow-y: auto; }
+.paper-finder-item { padding: var(--size-4-2) var(--size-4-3); border-radius: var(--radius-s); cursor: pointer; }
+.paper-finder-item + .paper-finder-item { border-top: 1px solid var(--background-modifier-border); }
+.paper-finder-item.is-selected { background: var(--background-modifier-hover); }
+.paper-finder-title { font-weight: var(--font-semibold); }
+.paper-finder-badge { margin-left: var(--size-4-2); font-size: var(--font-ui-smaller); font-weight: normal; color: var(--text-on-accent); background: var(--interactive-accent); border-radius: var(--radius-s); padding: 0 var(--size-4-1); }
+.paper-finder-meta { color: var(--text-normal); font-size: var(--font-ui-small); }
+.paper-finder-ids { color: var(--text-faint); font-size: var(--font-ui-smaller); font-family: var(--font-monospace); }
+.paper-finder-abstract { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: var(--size-2-1); }
+.paper-finder-order-item { padding-left: var(--size-4-6); border-top: none; }
