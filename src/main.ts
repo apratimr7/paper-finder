@@ -13,8 +13,10 @@ import {
 } from "obsidian";
 import { firstLink, firstWorkingLink, isSafeUrl } from "./links";
 import { FindPaperModal } from "./modal";
-import { DEFAULT_NOTE_TEMPLATE, render, renderFilename, renderFolder, renderNote, templateVars } from "./note";
+import { DEFAULT_NOTE_TEMPLATE, render, renderFilename, renderFolder, renderNote, sanitizeFilename, templateVars } from "./note";
+import { confirm, downloadPdf, insertEmbed, isAbsolutePath, saveInVault, saveOutside } from "./pdf";
 import { findPapers, type SearchResult } from "./search";
+import { openalex } from "./sources/openalex";
 import { DEFAULT_SETTINGS, PaperFinderSettingTab, type PaperFinderSettings } from "./settings";
 import type { HttpGet, Paper, SourceContext, SourceId } from "./types";
 import { normalizeArxiv, normalizeDoi, plainText, yearOf } from "./util";
@@ -64,6 +66,17 @@ export default class PaperFinderPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "download-pdf",
+      name: "Download PDF for current note",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension !== "md" || !this.app.metadataCache.getFileCache(file)?.frontmatter) return false;
+        if (!checking) void this.downloadPdfForNote(file);
+        return true;
+      },
+    });
+
+    this.addCommand({
       id: "cite-paper",
       name: "Cite paper",
       editorCallback: (editor: Editor, view) => {
@@ -80,6 +93,7 @@ export default class PaperFinderPlugin extends Plugin {
       ...data,
       sources: { ...DEFAULT_SETTINGS.sources, ...(data.sources ?? {}) },
       props: { ...DEFAULT_SETTINGS.props, ...(data.props ?? {}) },
+      pdfOrder: Array.isArray(data.pdfOrder) ? data.pdfOrder : [...DEFAULT_SETTINGS.pdfOrder],
       noteLinkOrder: Array.isArray(data.noteLinkOrder) ? data.noteLinkOrder : [...DEFAULT_SETTINGS.noteLinkOrder],
       openLinkOrder: Array.isArray(data.openLinkOrder) ? data.openLinkOrder : [...DEFAULT_SETTINGS.openLinkOrder],
     };
@@ -193,6 +207,10 @@ export default class PaperFinderPlugin extends Plugin {
       return;
     }
     if (this.settings.openNoteAfterCreate || existing) await this.app.workspace.getLeaf(false).openFile(file);
+    if (!existing && this.settings.pdfMode !== "off") {
+      const go = this.settings.pdfMode === "always" || (await confirm(this.app, "Download PDF?", `Download the PDF of "${p.title}"?`));
+      if (go) await this.attachPdf(file, p);
+    }
     if (this.settings.openLinkAfterCreate) {
       const url = await firstWorkingLink(this.settings.openLinkOrder, p, obsidianHttp);
       if (url) await this.openUrl(url);
@@ -220,6 +238,61 @@ export default class PaperFinderPlugin extends Plugin {
       publisherUrl: url,
       sources: [],
     };
+  }
+
+  async downloadPdfForNote(file: TFile): Promise<void> {
+    const p = this.paperFromNote(file);
+    const prop = this.settings.pdfProperty;
+    if (prop && this.str(this.prop(this.fm(file), prop)).trim()) {
+      if (!(await confirm(this.app, "Download PDF again?", `"${file.basename}" already has a ${prop} property.`, "Download again"))) return;
+    }
+    // Notes only store a DOI / arXiv id; ask OpenAlex for an open-access PDF (and a missing arXiv id).
+    if (p.doi && (!p.arxiv || this.settings.pdfOrder.includes("oa-pdf"))) {
+      const extra = await openalex.byDoi!(p.doi, this.ctx()).catch(() => null);
+      if (extra) {
+        p.arxiv ??= extra.arxiv;
+        p.oaPdfUrl = extra.oaPdfUrl;
+      }
+    }
+    await this.attachPdf(file, p);
+  }
+
+  /** Download the PDF, save it where the settings say, and link / embed it in the note. */
+  async attachPdf(note: TFile, p: Paper): Promise<void> {
+    const s = this.settings;
+    const notice = new Notice("Downloading PDF…", 0);
+    try {
+      const dl = await downloadPdf(s.pdfOrder, p, s.pdfMaxMB);
+      if ("error" in dl) {
+        new Notice(`Paper Finder: no PDF saved (${dl.error}).`, 8000);
+        return;
+      }
+      const vars = templateVars(p, undefined);
+      const base = renderFilename(s.pdfFilenameTemplate || s.filenameTemplate, vars);
+      let link: string;
+      let embed: string | null = null;
+      let where: string;
+      if (isAbsolutePath(s.pdfFolder)) {
+        const dir = render(s.pdfFolder, vars, (v) => sanitizeFilename(v, 100));
+        const out = await saveOutside(dir, base, dl.data);
+        link = out.fileUrl;
+        where = out.absPath;
+      } else {
+        const dir = s.pdfFolder ? renderFolder(s.pdfFolder, vars) : note.parent?.path ?? "";
+        const pdf = await saveInVault(this.app, dir, base, dl.data);
+        const linktext = this.app.metadataCache.fileToLinktext(pdf, note.path, false);
+        link = `[[${linktext}]]`;
+        embed = s.pdfEmbed ? `![[${linktext}]]` : null;
+        where = pdf.path;
+      }
+      if (s.pdfProperty) await this.app.fileManager.processFrontMatter(note, (fm) => (fm[s.pdfProperty] = link));
+      if (embed) await this.app.vault.process(note, (c) => insertEmbed(c, embed!));
+      new Notice(`Saved PDF: ${where}`);
+    } catch (e) {
+      new Notice(`Paper Finder: could not save the PDF: ${e instanceof Error ? e.message : e}`, 8000);
+    } finally {
+      notice.hide();
+    }
   }
 
   async openLinkOfNote(file: TFile): Promise<void> {

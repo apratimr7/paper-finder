@@ -18,7 +18,7 @@ if (mode === "test") {
   const ctx = await esbuild.context({
     entryPoints: ["src/main.ts"],
     bundle: true,
-    external: ["obsidian", "electron", "@codemirror/*", "@lezer/*"],
+    external: ["obsidian", "electron", "@codemirror/*", "@lezer/*", "fs", "path", "os", "url"],
     format: "cjs",
     target: "es2021",
     logLevel: "info",

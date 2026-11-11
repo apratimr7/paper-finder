@@ -28,6 +28,7 @@ Identifiers are looked up directly. Free text is sent to every enabled source, a
 - **Find paper**: open the search box. There's also a ribbon icon. No hotkey is set by default; assign one in *Settings → Hotkeys*.
 - **Find paper from selected text**: search for the current selection.
 - **Open paper link of current note**: open the current source note's paper, following your link order.
+- **Download PDF for current note**: fetch the arXiv or open-access PDF of the paper in the current note.
 - **Cite paper**: pick a source note and insert a citation, by default `[[Note|Author Year]]`.
 
 ## Settings
@@ -41,6 +42,10 @@ Everything that is specific to one vault can be configured.
 - **Open links in**: web viewer in a split, web viewer in a new tab, or the system browser. On mobile and without the core Web viewer plugin, the system browser is always used.
 - **Cite from folder**: which notes the Cite command offers (default: the folder for new notes; `/` for the whole vault).
 - **Property names**: the frontmatter keys your template uses for title, authors, year, DOI, arXiv id and link. They're used to detect papers already in the vault, to cite, and to open links.
+- **PDFs**: download *never* (default), *ask each time* or *always* when a note is created.
+  - **PDF folder**: empty means next to the note. A vault path (placeholders allowed) keeps the PDF in the vault, where it can be embedded with `![[file.pdf]]`. The embed goes before a "References" heading, or at the end. An absolute path (`~/Papers`, `/data/papers`, `C:\Papers`) saves outside the vault (desktop only); the note then gets a `file://` link and no embed.
+  - Also configurable: the PDF file name, the source order (arXiv PDF, open-access PDF), the frontmatter property that receives the link, and the maximum size.
+  - Only arXiv and open-access PDFs are fetched. Responses that aren't real PDFs (paywall or error pages) are rejected by checking the `%PDF-` header. Existing files are never overwritten.
 - **Optional API access**: a contact e-mail for OpenAlex and Crossref's "polite pool", and API keys for OpenAlex and Semantic Scholar. All of these are empty by default, and nothing identifying is sent unless you add it.
 
 ### Placeholders
@@ -69,6 +74,7 @@ Frontmatter values are YAML-escaped automatically, quoted or not, so titles with
 - **Three pinned dev dependencies** (`obsidian` type definitions, `typescript`, `esbuild`), installed with `ignore-scripts=true` (see `.npmrc`), with exact versions and a committed lockfile. Use `npm ci`.
 - **Untrusted text is never treated as HTML.** API responses (titles, abstracts, which can contain markup) are converted to plain text and displayed with Obsidian's `setText`/`createEl`, never `innerHTML`. Publisher pages fetched to find a DOI are only scanned with regular expressions for `citation_doi` meta tags.
 - **Only `https:`/`http:` links** are stored or opened.
+- **Files outside the vault** are written only when you set an absolute PDF folder. Each path is checked to stay inside that folder, and existing files are never overwritten.
 - **Network access** goes only to the sources you enable (plus `arxiv.org`/`ar5iv` to check HTML availability, and a publisher page when you paste its URL), through Obsidian's `requestUrl`.
 - API keys, if you add any, are stored in the plugin's `data.json` inside your vault.
 

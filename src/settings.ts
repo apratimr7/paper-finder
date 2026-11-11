@@ -1,11 +1,13 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { ALL_LINK_KINDS, LINK_LABELS, type LinkKind } from "./links";
 import { DEFAULT_NOTE_TEMPLATE, PLACEHOLDER_HELP } from "./note";
+import { PDF_LINK_KINDS } from "./pdf";
 import type { YearMode } from "./search";
 import { SOURCE_LABELS, type SourceId } from "./types";
 import type PaperFinderPlugin from "./main";
 
 export type OpenMode = "webviewer" | "tab" | "browser";
+export type PdfMode = "off" | "ask" | "always";
 
 export interface PaperFinderSettings {
   folder: string;
@@ -24,6 +26,13 @@ export interface PaperFinderSettings {
   searchAsYouType: boolean;
   debounceMs: number;
   resultsPerSource: number;
+  pdfMode: PdfMode;
+  pdfFolder: string;
+  pdfFilenameTemplate: string;
+  pdfOrder: LinkKind[];
+  pdfEmbed: boolean;
+  pdfProperty: string;
+  pdfMaxMB: number;
   mailto: string;
   openalexKey: string;
   s2Key: string;
@@ -47,6 +56,13 @@ export const DEFAULT_SETTINGS: PaperFinderSettings = {
   searchAsYouType: true,
   debounceMs: 800,
   resultsPerSource: 8,
+  pdfMode: "off",
+  pdfFolder: "",
+  pdfFilenameTemplate: "",
+  pdfOrder: ["arxiv-pdf", "oa-pdf"],
+  pdfEmbed: true,
+  pdfProperty: "pdf",
+  pdfMaxMB: 50,
   mailto: "",
   openalexKey: "",
   s2Key: "",
@@ -181,6 +197,59 @@ export class PaperFinderSettingTab extends PluginSettingTab {
       }),
     );
 
+    new Setting(containerEl)
+      .setName("PDFs")
+      .setHeading()
+      .setDesc("Only arXiv and open-access PDFs are downloaded. Files that are not real PDFs (e.g. paywall pages) are rejected.");
+    new Setting(containerEl)
+      .setName("Download PDF when creating a note")
+      .setDesc("The Download PDF for current note command works whatever this is set to.")
+      .addDropdown((d) => d
+        .addOptions({ off: "Never", ask: "Ask each time", always: "Always" })
+        .setValue(this.s.pdfMode)
+        .onChange(async (v) => {
+          this.s.pdfMode = v as PdfMode;
+          await this.save();
+        }));
+    new Setting(containerEl)
+      .setName("PDF folder")
+      .setDesc(
+        "Empty: next to the note. A vault path (e.g. Attachments/Papers, may contain placeholders) keeps PDFs in the vault so they can be embedded. " +
+          "An absolute path (e.g. ~/Papers or C:\\Papers) saves outside the vault (desktop only); the note then gets a file:// link and no embed.",
+      )
+      .addText((t) => t.setPlaceholder("next to the note").setValue(this.s.pdfFolder).onChange(async (v) => {
+        this.s.pdfFolder = v.trim();
+        await this.save();
+      }));
+    new Setting(containerEl)
+      .setName("PDF file name")
+      .setDesc("Placeholders as for notes. Empty: same as the note's file name.")
+      .addText((t) => t.setPlaceholder("same as note").setValue(this.s.pdfFilenameTemplate).onChange(async (v) => {
+        this.s.pdfFilenameTemplate = v;
+        await this.save();
+      }));
+    this.orderList(containerEl, "PDF sources", "Tried in this order.", "pdfOrder", PDF_LINK_KINDS);
+    new Setting(containerEl)
+      .setName("Embed the PDF in the note")
+      .setDesc("Adds ![[file.pdf]] before a References heading, or at the end. Only for PDFs inside the vault.")
+      .addToggle((t) => t.setValue(this.s.pdfEmbed).onChange(async (v) => {
+        this.s.pdfEmbed = v;
+        await this.save();
+      }));
+    new Setting(containerEl)
+      .setName("PDF property")
+      .setDesc("Frontmatter key that gets the link to the PDF. Empty: don't add one.")
+      .addText((t) => t.setPlaceholder("pdf").setValue(this.s.pdfProperty).onChange(async (v) => {
+        this.s.pdfProperty = v.trim();
+        await this.save();
+      }));
+    new Setting(containerEl)
+      .setName("Maximum PDF size (MB)")
+      .addSlider((sl) => sl.setLimits(5, 200, 5).setValue(this.s.pdfMaxMB).setDynamicTooltip().onChange(async (v) => {
+        this.s.pdfMaxMB = v;
+        await this.save();
+      }));
+
     new Setting(containerEl).setName("Search").setHeading();
     new Setting(containerEl).setName("Search as you type").setDesc("Off: search only when you press Enter.").addToggle((t) =>
       t.setValue(this.s.searchAsYouType).onChange(async (v) => {
@@ -255,7 +324,13 @@ export class PaperFinderSettingTab extends PluginSettingTab {
   }
 
   /** A reorderable list of link kinds, with add / remove. */
-  private orderList(el: HTMLElement, name: string, desc: string, key: "noteLinkOrder" | "openLinkOrder"): void {
+  private orderList(
+    el: HTMLElement,
+    name: string,
+    desc: string,
+    key: "noteLinkOrder" | "openLinkOrder" | "pdfOrder",
+    allowed: LinkKind[] = ALL_LINK_KINDS,
+  ): void {
     new Setting(el).setName(name).setDesc(desc);
     const order = this.s[key];
     order.forEach((kind, i) => {
@@ -278,7 +353,7 @@ export class PaperFinderSettingTab extends PluginSettingTab {
           this.display();
         }));
     });
-    const missing = ALL_LINK_KINDS.filter((k) => !order.includes(k));
+    const missing = allowed.filter((k) => !order.includes(k));
     if (missing.length) {
       new Setting(el).setClass("paper-finder-order-item").addDropdown((d) => {
         d.addOption("", "Add a link type…");
