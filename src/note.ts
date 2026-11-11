@@ -77,6 +77,10 @@ export function sanitizeFilename(name: string, maxLength = 150): string {
     .replace(/^\.+/, "")
     .replace(/[. ]+$/, "");
   if (s.length > maxLength) s = s.slice(0, maxLength).replace(/[\s\-–,;.]+\S*$/, "") || s.slice(0, maxLength);
+  // File systems limit names to 255 bytes; leave room for " (2).pdf". Trim whole code points.
+  const enc = new TextEncoder();
+  while (enc.encode(s).length > 200) s = Array.from(s).slice(0, -1).join("");
+  s = s.replace(/[. ]+$/, "");
   return s || "Untitled paper";
 }
 
@@ -94,7 +98,11 @@ export function renderFolder(template: string, vars: TemplateVars): string {
     .join("/");
 }
 
-const oneLine = (s: string) => s.replace(/\s+/g, " ");
+/**
+ * Values in the note body: one line, and anything that looks like an HTML tag is escaped so that
+ * text from an API (e.g. "&lt;img src=…&gt;" in an abstract) can't become live HTML in the note.
+ */
+const bodyValue = (s: string) => s.replace(/\s+/g, " ").replace(/<(?=[A-Za-z\/!?])/g, "\\<");
 
 /** YAML double-quoted scalar. JSON string syntax is valid YAML. */
 export const yamlQuote = (s: string) => JSON.stringify(s.replace(/\s+/g, " "));
@@ -112,7 +120,7 @@ export function renderNote(template: string, vars: TemplateVars): string {
   const fm = t.match(/^---\n([\s\S]*?)\n---(?=\n|$)/);
   if (!fm) return render(t, vars);
   const yaml = fm[1].split("\n").map((line) => renderYamlLine(line, vars)).join("\n");
-  return `---\n${yaml}\n---` + render(t.slice(fm[0].length), vars, oneLine);
+  return `---\n${yaml}\n---` + render(t.slice(fm[0].length), vars, bodyValue);
 }
 
 function renderYamlLine(line: string, vars: TemplateVars): string {
@@ -130,12 +138,49 @@ function renderYamlLine(line: string, vars: TemplateVars): string {
     return vars.authors.map((a) => `${prefix}${yamlQuote(a)}`).join("\n");
   }
 
-  if (/^".*"$/.test(rest)) return prefix + '"' + render(rest.slice(1, -1), vars, inDouble) + '"';
-  if (/^'.*'$/.test(rest)) return prefix + "'" + render(rest.slice(1, -1), vars, inSingle) + "'";
+  // A trailing YAML comment after a quoted value is kept as a comment.
+  const withComment = rest.match(/^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')(\s+#.*)$/);
+  const value = withComment ? withComment[1] : rest;
+  const comment = withComment ? withComment[2] : "";
 
-  const value = render(rest, vars).trim();
-  if (!value) return prefix.trimEnd();
-  return prefix + yamlQuote(value);
+  if (/^"(?:[^"\\]|\\.)*"$/.test(value)) return prefix + '"' + render(value.slice(1, -1), vars, inDouble) + '"' + comment;
+  if (/^'(?:[^']|'')*'$/.test(value)) return prefix + "'" + render(value.slice(1, -1), vars, inSingle) + "'" + comment;
+
+  // Flow sequence, e.g. aliases: ["{{title}}", "{{citekey}}"]: escape each element.
+  const flow = value.match(/^\[(.*)\]$/);
+  if (flow) {
+    const items = splitFlow(flow[1]).flatMap((el) => {
+      const inner = el.trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+      if (/^\{\{\s*authors\s*\}\}$/.test(inner)) return vars.authors;
+      const v = render(inner, vars).trim();
+      return v ? [v] : [];
+    });
+    return `${prefix}[${items.map(yamlQuote).join(", ")}]`;
+  }
+
+  const rendered = render(value, vars).trim();
+  if (!rendered) return prefix.trimEnd();
+  return prefix + yamlQuote(rendered);
+}
+
+/** Split the inside of a flow sequence on top-level commas, respecting quotes. */
+function splitFlow(s: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let q: string | null = null;
+  for (const ch of s) {
+    if (q) {
+      if (ch === q) q = null;
+    } else if (ch === '"' || ch === "'") q = ch;
+    else if (ch === ",") {
+      out.push(cur);
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
 }
 
 export const DEFAULT_NOTE_TEMPLATE = `---

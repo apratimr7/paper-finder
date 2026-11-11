@@ -76,3 +76,14 @@ console.log("\n=== template rendering\n" + core.renderNote(userTemplate, vars));
 console.log(core.renderNote(core.DEFAULT_NOTE_TEMPLATE, vars));
 console.log("filename:", core.renderFilename("{{author}} {{year}} - {{title}}", vars));
 console.log("folder:", core.renderFolder("Papers/../{{year}}/", vars));
+
+// The same paper found in different ways must end up with the same file name.
+{
+  const names = new Set();
+  for (const q of ["maldacena large n limit superconformal", "hep-th/9711200", "https://inspirehep.net/literature/451647", "10.4310/atmp.1998.v2.n2.a1"]) {
+    const r = await core.findPapers(q, enabled, ctx);
+    const top = await core.confirmByDoi(r.papers[0], enabled, ctx);
+    names.add(core.renderFilename("{{author}} {{year}} - {{title}}", core.templateVars(top, undefined)));
+  }
+  console.log(names.size === 1 ? "PASS" : "FAIL", "consistent file name:", [...names]);
+}

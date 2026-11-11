@@ -11,11 +11,11 @@ import {
   TFolder,
   type App,
 } from "obsidian";
-import { firstLink, firstWorkingLink, isSafeUrl } from "./links";
+import { ALL_LINK_KINDS, firstLink, firstWorkingLink, isSafeUrl, type LinkKind } from "./links";
 import { FindPaperModal } from "./modal";
 import { DEFAULT_NOTE_TEMPLATE, render, renderFilename, renderFolder, renderNote, sanitizeFilename, templateVars } from "./note";
-import { confirm, downloadPdf, insertEmbed, isAbsolutePath, saveInVault, saveOutside } from "./pdf";
-import { findPapers, type SearchResult } from "./search";
+import { confirm, downloadPdf, insertEmbed, isAbsolutePath, PDF_LINK_KINDS, saveInVault, saveOutside } from "./pdf";
+import { confirmByDoi, findPapers, type SearchResult } from "./search";
 import { openalex } from "./sources/openalex";
 import { DEFAULT_SETTINGS, PaperFinderSettingTab, type PaperFinderSettings } from "./settings";
 import type { HttpGet, Paper, SourceContext, SourceId } from "./types";
@@ -27,8 +27,9 @@ const TIMEOUT_MS = 20_000;
 const obsidianHttp: HttpGet = (url, headers) => {
   if (!isSafeUrl(url)) return Promise.reject(new Error("Refusing a non-http(s) URL"));
   const req = requestUrl({ url, headers, throw: false }).then((r) => ({ status: r.status, text: r.text }));
-  const timeout = new Promise<never>((_, rej) => window.setTimeout(() => rej(new Error("timed out")), TIMEOUT_MS));
-  return Promise.race([req, timeout]);
+  let timer = 0;
+  const timeout = new Promise<never>((_, rej) => (timer = window.setTimeout(() => rej(new Error("timed out")), TIMEOUT_MS)));
+  return Promise.race([req, timeout]).finally(() => window.clearTimeout(timer));
 };
 
 const normTitle = (t: string) => t.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, "");
@@ -97,6 +98,19 @@ export default class PaperFinderPlugin extends Plugin {
       noteLinkOrder: Array.isArray(data.noteLinkOrder) ? data.noteLinkOrder : [...DEFAULT_SETTINGS.noteLinkOrder],
       openLinkOrder: Array.isArray(data.openLinkOrder) ? data.openLinkOrder : [...DEFAULT_SETTINGS.openLinkOrder],
     };
+    this.cleanOrders();
+  }
+
+  /** Drop unknown link kinds from saved settings (e.g. after a downgrade or a hand-edited data.json). */
+  private cleanOrders(): void {
+    const s = this.settings;
+    const keep = (arr: LinkKind[], allowed: readonly LinkKind[], fallback: LinkKind[]) => {
+      const out = arr.filter((k, i) => allowed.includes(k) && arr.indexOf(k) === i);
+      return out.length ? out : [...fallback];
+    };
+    s.noteLinkOrder = keep(s.noteLinkOrder, ALL_LINK_KINDS, DEFAULT_SETTINGS.noteLinkOrder);
+    s.openLinkOrder = keep(s.openLinkOrder, ALL_LINK_KINDS, DEFAULT_SETTINGS.openLinkOrder);
+    s.pdfOrder = keep(s.pdfOrder, PDF_LINK_KINDS, DEFAULT_SETTINGS.pdfOrder);
   }
 
   async saveSettings(): Promise<void> {
@@ -108,8 +122,12 @@ export default class PaperFinderPlugin extends Plugin {
     return { http: obsidianHttp, mailto: s.mailto, openalexKey: s.openalexKey, s2Key: s.s2Key, limit: s.resultsPerSource };
   }
 
+  private enabledSources(): SourceId[] {
+    return (Object.keys(this.settings.sources) as SourceId[]).filter((k) => this.settings.sources[k]);
+  }
+
   search(query: string, isCancelled?: () => boolean): Promise<SearchResult> {
-    const enabled = (Object.keys(this.settings.sources) as SourceId[]).filter((k) => this.settings.sources[k]);
+    const enabled = this.enabledSources();
     if (!enabled.length) return Promise.reject(new Error("No sources are enabled in the settings"));
     return findPapers(query, enabled, { ...this.ctx(), isCancelled }, this.settings.yearMode);
   }
@@ -199,6 +217,10 @@ export default class PaperFinderPlugin extends Plugin {
     try {
       if (file) new Notice(`Already in your vault: ${file.basename}`);
       else {
+        // In "first appearance" mode the preprint year is wanted, so only title/venue are refreshed.
+        const confirmed = await confirmByDoi(p, this.enabledSources(), this.ctx());
+        if (this.settings.yearMode === "first") confirmed.year = p.year;
+        p = confirmed;
         file = await this.createNote(p);
         new Notice(`Created ${file.basename}`);
       }
@@ -272,7 +294,8 @@ export default class PaperFinderPlugin extends Plugin {
       let link: string;
       let embed: string | null = null;
       let where: string;
-      if (isAbsolutePath(s.pdfFolder)) {
+      if (s.pdfOutsideVault) {
+        if (!isAbsolutePath(s.pdfFolder)) throw new Error("the PDF folder must be an absolute path (e.g. ~/Papers) when saving outside the vault");
         const dir = render(s.pdfFolder, vars, (v) => sanitizeFilename(v, 100));
         const out = await saveOutside(dir, base, dl.data);
         link = out.fileUrl;
@@ -308,15 +331,14 @@ export default class PaperFinderPlugin extends Plugin {
     const link = this.app.metadataCache.fileToLinktext(file, sourcePath, true);
     // Characters that would break a wikilink alias.
     const safe = (s: string) => s.replace(/[[\]|]/g, "");
-    return render(this.settings.citeTemplate.replace(/\{\{\s*link\s*\}\}/g, "\u0000LINK\u0000"), vars, safe).replace(/\u0000LINK\u0000/g, link);
+    return render(this.settings.citeTemplate.replace(/\{\{\s*link\s*\}\}/g, "\u0000LINK\u0000"), vars, safe).replace(/\u0000LINK\u0000/g, () => link);
   }
 
   async openUrl(url: string): Promise<void> {
     if (!isSafeUrl(url)) return;
     const mode = this.settings.openMode;
-    const internal = (this.app as unknown as { internalPlugins?: { getEnabledPluginById?(id: string): unknown } }).internalPlugins;
-    const webviewerOn = internal?.getEnabledPluginById ? !!internal.getEnabledPluginById("webviewer") : true;
-    if (mode === "browser" || Platform.isMobile || !webviewerOn) {
+    // If the core Web viewer plugin is off, the view type below doesn't exist and we fall back.
+    if (mode === "browser" || Platform.isMobile) {
       window.open(url, "_blank");
       return;
     }

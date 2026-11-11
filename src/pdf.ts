@@ -44,10 +44,18 @@ export async function downloadPdf(order: LinkKind[], p: Paper, maxMB: number): P
     const url = linkFor(kind, p);
     if (!isSafeUrl(url) || tried.has(url)) continue;
     tried.add(url);
+    let timer = 0;
     try {
+      // Ask for the size first, so a huge file is not downloaded into memory only to be rejected.
+      const head = await requestUrl({ url, method: "HEAD", throw: false }).catch(() => null);
+      const declared = Number(head?.headers?.["content-length"] ?? head?.headers?.["Content-Length"]);
+      if (head && head.status === 200 && Number.isFinite(declared) && declared > maxMB * 1024 * 1024) {
+        errors.push(`${new URL(url).host}: larger than ${maxMB} MB`);
+        continue;
+      }
       const res = await Promise.race([
         requestUrl({ url, throw: false }),
-        new Promise<never>((_, rej) => window.setTimeout(() => rej(new Error("timed out")), 90_000)),
+        new Promise<never>((_, rej) => (timer = window.setTimeout(() => rej(new Error("timed out")), 90_000))),
       ]);
       if (res.status !== 200) {
         errors.push(`${new URL(url).host}: HTTP ${res.status}`);
@@ -65,6 +73,8 @@ export async function downloadPdf(order: LinkKind[], p: Paper, maxMB: number): P
       return { url, data };
     } catch (e) {
       errors.push(`${new URL(url).host}: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      window.clearTimeout(timer);
     }
   }
   return { error: errors.length ? errors.join("; ") : "no arXiv or open-access PDF is known for this paper" };
@@ -123,8 +133,13 @@ export async function saveOutside(folder: string, base: string, data: ArrayBuffe
 
 /** Insert an embed before a "References" heading if the note has one, otherwise at the end. */
 export function insertEmbed(content: string, embed: string): string {
-  const m = content.match(/^#{1,6}\s*References\b.*$/im);
-  if (m && m.index !== undefined) return content.slice(0, m.index) + `${embed}\n\n` + content.slice(m.index);
+  const fm = content.match(/^---\n[\s\S]*?\n---(?:\n|$)/);
+  const start = fm ? fm[0].length : 0;
+  const m = content.slice(start).match(/^#{1,6}\s+References\s*:?\s*$/im);
+  if (m && m.index !== undefined) {
+    const at = start + m.index;
+    return content.slice(0, at) + `${embed}\n\n` + content.slice(at);
+  }
   return content.replace(/\s*$/, "") + `\n\n${embed}\n`;
 }
 

@@ -9,6 +9,7 @@ ok(pdf.looksLikePdf(new TextEncoder().encode("%PDF-1.7 ...").buffer), "pdf magic
 ok(!pdf.looksLikePdf(new TextEncoder().encode("<!DOCTYPE html><html>").buffer), "html rejected");
 ok(pdf.insertEmbed("---\na: 1\n---\n---\n\n\n# References:\n", "![[x.pdf]]") === "---\na: 1\n---\n---\n\n\n![[x.pdf]]\n\n# References:\n", "embed placed before References");
 ok(pdf.insertEmbed("body\n\n", "![[x.pdf]]") === "body\n\n![[x.pdf]]\n", "embed at end");
+ok(pdf.insertEmbed("---\n# References are below\n---\n#references-todo\ntext\n", "E") === "---\n# References are below\n---\n#references-todo\ntext\n\nE\n", "YAML comment and tag are not mistaken for the heading");
 const r1 = await pdf.downloadPdf(["arxiv-pdf", "oa-pdf"], { arxiv: "1608.04948", sources: [] }, 50);
 ok(r1.data && r1.data.byteLength > 100000, `arXiv PDF downloaded (${r1.data?.byteLength} bytes from ${r1.url})`);
 const r2 = await pdf.downloadPdf(["oa-pdf"], { oaPdfUrl: "https://journals.aps.org/prd/abstract/10.1103/PhysRevD.101.084046", sources: [] }, 50);

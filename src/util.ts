@@ -22,7 +22,8 @@ export function decodeEntities(s: string): string {
 export function plainText(s: string | undefined | null): string {
   if (!s) return "";
   return decodeEntities(String(s).replace(/<[^>]*>/g, " "))
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    // C0/C1 control characters and non-characters, which YAML forbids.
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u0084\u0086-\u009f\ufffe\uffff]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

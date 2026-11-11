@@ -5,12 +5,22 @@ const BASE = "https://export.arxiv.org/api/query";
 
 // arXiv asks clients to make at most one request every three seconds.
 const MIN_INTERVAL_MS = 3100;
-let nextSlot = 0;
-async function throttle(): Promise<void> {
-  const now = Date.now();
-  const wait = Math.max(0, nextSlot - now);
-  nextSlot = Math.max(now, nextSlot) + MIN_INTERVAL_MS;
-  if (wait > 0) await sleep(wait);
+let lastRequest = 0;
+/**
+ * Wait until arXiv may be called again. A slot is only taken at the moment the request is made,
+ * so superseded searches that give up while waiting don't delay newer ones.
+ * Returns false if the search was cancelled while waiting.
+ */
+async function throttle(isCancelled?: () => boolean): Promise<boolean> {
+  for (;;) {
+    if (isCancelled?.()) return false;
+    const wait = lastRequest + MIN_INTERVAL_MS - Date.now();
+    if (wait <= 0) {
+      lastRequest = Date.now();
+      return true;
+    }
+    await sleep(Math.min(wait, 250));
+  }
 }
 
 function tag(xml: string, name: string): string | undefined {
@@ -67,14 +77,12 @@ export const arxiv: Source = {
   async search(query, ctx: SourceContext) {
     const sq = arxivQuery(query);
     if (!sq) return [];
-    if (ctx.isCancelled?.()) return [];
-    await throttle();
-    if (ctx.isCancelled?.()) return [];
+    if (!(await throttle(ctx.isCancelled))) return [];
     const xml = await getText(ctx.http, `${BASE}?search_query=${encodeURIComponent(sq)}&start=0&max_results=${ctx.limit}`);
     return xml ? parseArxivAtom(xml) : [];
   },
   async byArxiv(id, ctx) {
-    await throttle();
+    if (!(await throttle(ctx.isCancelled))) return null;
     const xml = await getText(ctx.http, `${BASE}?id_list=${encodeURIComponent(id)}&max_results=1`);
     return xml ? parseArxivAtom(xml)[0] ?? null : null;
   },

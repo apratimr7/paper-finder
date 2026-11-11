@@ -28,6 +28,7 @@ export interface PaperFinderSettings {
   resultsPerSource: number;
   pdfMode: PdfMode;
   pdfFolder: string;
+  pdfOutsideVault: boolean;
   pdfFilenameTemplate: string;
   pdfOrder: LinkKind[];
   pdfEmbed: boolean;
@@ -58,6 +59,7 @@ export const DEFAULT_SETTINGS: PaperFinderSettings = {
   resultsPerSource: 8,
   pdfMode: "off",
   pdfFolder: "",
+  pdfOutsideVault: false,
   pdfFilenameTemplate: "",
   pdfOrder: ["arxiv-pdf", "oa-pdf"],
   pdfEmbed: true,
@@ -212,12 +214,21 @@ export class PaperFinderSettingTab extends PluginSettingTab {
           await this.save();
         }));
     new Setting(containerEl)
+      .setName("Save PDFs outside the vault")
+      .setDesc("Off: PDFs go into the vault and can be embedded. On: PDFs go to a folder anywhere on this computer; the note gets a file:// link and no embed.")
+      .addToggle((t) => t.setValue(this.s.pdfOutsideVault).onChange(async (v) => {
+        this.s.pdfOutsideVault = v;
+        await this.save();
+        this.display();
+      }));
+    new Setting(containerEl)
       .setName("PDF folder")
       .setDesc(
-        "Empty: next to the note. A vault path (e.g. Attachments/Papers, may contain placeholders) keeps PDFs in the vault so they can be embedded. " +
-          "An absolute path (e.g. ~/Papers or C:\\Papers) saves outside the vault (desktop only); the note then gets a file:// link and no embed.",
+        this.s.pdfOutsideVault
+          ? "An absolute path on this computer, e.g. ~/Papers, /data/papers or C:\\Users\\me\\Papers. May contain placeholders."
+          : "A folder in the vault, e.g. Attachments/Papers. May contain placeholders. Empty: next to the note.",
       )
-      .addText((t) => t.setPlaceholder("next to the note").setValue(this.s.pdfFolder).onChange(async (v) => {
+      .addText((t) => t.setPlaceholder(this.s.pdfOutsideVault ? "~/Papers" : "next to the note").setValue(this.s.pdfFolder).onChange(async (v) => {
         this.s.pdfFolder = v.trim();
         await this.save();
       }));

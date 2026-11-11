@@ -12,6 +12,14 @@ export type ParsedInput =
 const NEW_ARXIV = /^(?:arxiv:\s*)?(\d{4}\.\d{4,5})(v\d+)?$/i;
 const OLD_ARXIV = /^(?:arxiv:\s*)?([a-z-]+(?:\.[a-z]{2})?\/\d{7})(v\d+)?$/i;
 
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 /** Work out what the user typed: an identifier, a URL, or free text. */
 export function parseInput(raw: string): ParsedInput {
   const s = raw.trim();
@@ -24,7 +32,7 @@ export function parseInput(raw: string): ParsedInput {
       return { kind: "text", text: s };
     }
     const host = u.hostname.replace(/^www\./, "").toLowerCase();
-    const path = decodeURIComponent(u.pathname);
+    const path = safeDecode(u.pathname);
 
     if (/(^|\.)arxiv\.org$/.test(host) || host === "ar5iv.labs.arxiv.org" || host === "ar5iv.org") {
       const id = normalizeArxiv(path.replace(/^\/(abs|pdf|html|format|src)\//, "").replace(/\.pdf$/, ""));
@@ -49,7 +57,7 @@ export function parseInput(raw: string): ParsedInput {
       if (m) return { kind: "s2", paperId: m[1].toLowerCase() };
     }
     // Many publisher URLs embed the DOI (APS, Springer, Wiley, IOP, Elsevier's "doi/..." paths).
-    const doi = normalizeDoi(path + (u.search ? decodeURIComponent(u.search) : ""));
+    const doi = normalizeDoi(path + (u.search ? safeDecode(u.search) : ""));
     if (doi) return { kind: "doi", doi };
     return { kind: "url", url: u.toString() };
   }

@@ -1,0 +1,29 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: query
+    attributes:
+      label: Search input
+      description: The exact text, DOI, arXiv id or URL you typed, if relevant.
+  - type: textarea
+    id: settings
+    attributes:
+      label: Relevant settings
+      description: E.g. folder, file name template, note template. Please remove any API keys or e-mail addresses.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Paper Finder version, Obsidian version, operating system.
+      placeholder: Paper Finder 0.1.0, Obsidian 1.15.0, Linux
+    validations:
+      required: true

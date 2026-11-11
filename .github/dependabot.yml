@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    # Only propose versions that have been public for two weeks, so a compromised release
+    # has time to be noticed and pulled before it reaches this project.
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 3

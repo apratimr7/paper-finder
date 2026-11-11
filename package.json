@@ -8,7 +8,9 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "test:live": "node esbuild.config.mjs test && node test/live.mjs",
-    "test:pdf": "node -e \"require('esbuild').buildSync({entryPoints:['src/pdf.ts'],bundle:true,format:'cjs',platform:'node',outfile:'test/dist/pdf.cjs',alias:{obsidian:'./test/obsidian-stub.mjs'}})\" && node test/pdf.mjs"
+    "test:pdf": "node -e \"require('esbuild').buildSync({entryPoints:['src/pdf.ts'],bundle:true,format:'cjs',platform:'node',outfile:'test/dist/pdf.cjs',alias:{obsidian:'./test/obsidian-stub.mjs'}})\" && node test/pdf.mjs",
+    "version": "node version-bump.mjs && git add manifest.json versions.json",
+    "test:note": "node esbuild.config.mjs test && node test/note.mjs"
   },
   "license": "MIT",
   "devDependencies": {

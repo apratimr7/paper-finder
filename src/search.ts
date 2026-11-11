@@ -66,7 +66,39 @@ function take(into: Paper, from: Paper, field: "title" | "doi" | "year"): void {
 const minYear = (a?: string, b?: string) => (a && b ? (a < b ? a : b) : a ?? b);
 
 /** Fill the gaps in `into` from `from`, using FIELD_PRIORITY where sources disagree. */
+function noteDoi(into: Paper, from: Paper): void {
+  const src = from.sources[0];
+  // INSPIRE lists all DOIs and journal references of a record without pairing them, so its
+  // year/venue may belong to a different publication than its first DOI.
+  if (!from.doi || src === "inspire") return;
+  const rec = ((into.byDoi ??= {})[from.doi] ??= {});
+  if (rec.crossref) return;
+  const venue = from.venue && from.venue !== "arXiv" ? from.venue : undefined;
+  if (src === "crossref") {
+    // Crossref is the DOI registry itself: its record for a DOI is authoritative.
+    rec.year = from.year ?? rec.year;
+    rec.venue = venue ?? rec.venue;
+    rec.title = from.title;
+    rec.crossref = true;
+  } else {
+    rec.year ??= from.year;
+    rec.venue ??= venue;
+  }
+}
+
+/**
+ * Make sure year, venue and title come from Crossref's record of the paper's own DOI.
+ * Called once when a result is picked, so the note is the same however the paper was found.
+ */
+export async function confirmByDoi(p: Paper, enabled: SourceId[], ctx: SourceContext): Promise<Paper> {
+  if (!p.doi || !enabled.includes("crossref") || p.byDoi?.[p.doi]?.crossref) return p;
+  const c = await crossref.byDoi!(p.doi, ctx).catch(() => null);
+  if (!c || c.doi !== p.doi) return p;
+  return { ...p, title: c.title || p.title, year: c.year ?? p.year, venue: c.venue ?? p.venue };
+}
+
 function mergeInto(into: Paper, from: Paper): void {
+  noteDoi(into, from);
   take(into, from, "title");
   take(into, from, "doi");
   take(into, from, "year");
@@ -106,10 +138,18 @@ export function mergeResults(lists: Paper[][], queryYear?: string): Paper[] {
           firstYear: minYear(p.firstYear, p.year),
           fieldSrc: { title: src, doi: p.doi ? src : undefined, year: p.year ? src : undefined },
         });
+        noteDoi(merged[merged.length - 1], p);
       }
     });
   }
-  for (const m of merged) m.authors = m.authors.map(fixCaps);
+  for (const m of merged) {
+    m.authors = m.authors.map(fixCaps);
+    // Year and venue must describe the same publication as the chosen DOI (e.g. not a reprint's).
+    const rec = m.doi ? m.byDoi?.[m.doi] : undefined;
+    if (rec?.year) m.year = rec.year;
+    if (rec?.venue) m.venue = rec.venue;
+    if (rec?.title) m.title = rec.title;
+  }
   if (queryYear) for (const m of merged) if (m.year === queryYear || m.firstYear === queryYear) m.score = (m.score ?? 0) + 0.15;
   return merged.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }

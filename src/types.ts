@@ -26,6 +26,8 @@ export interface Paper {
   score?: number;
   /** Internal: which source supplied title / doi / year after merging. */
   fieldSrc?: Partial<Record<"title" | "doi" | "year", SourceId>>;
+  /** Internal: year and venue as reported together with each DOI, so they can be kept consistent. */
+  byDoi?: Record<string, { year?: string; venue?: string; title?: string; crossref?: boolean }>;
 }
 
 export type SourceId = "openalex" | "arxiv" | "inspire" | "crossref" | "semanticscholar";
