@@ -74,14 +74,14 @@ export function arxivQuery(q: string): string {
 
 export const arxiv: Source = {
   id: "arxiv",
-  async search(query, ctx: SourceContext) {
+  search: async (query, ctx: SourceContext) => {
     const sq = arxivQuery(query);
     if (!sq) return [];
     if (!(await throttle(ctx.isCancelled))) return [];
     const xml = await getText(ctx.http, `${BASE}?search_query=${encodeURIComponent(sq)}&start=0&max_results=${ctx.limit}`);
     return xml ? parseArxivAtom(xml) : [];
   },
-  async byArxiv(id, ctx) {
+  byArxiv: async (id, ctx) => {
     if (!(await throttle(ctx.isCancelled))) return null;
     const xml = await getText(ctx.http, `${BASE}?id_list=${encodeURIComponent(id)}&max_results=1`);
     return xml ? parseArxivAtom(xml)[0] ?? null : null;

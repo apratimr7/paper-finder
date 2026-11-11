@@ -168,10 +168,12 @@ async function lookupBy(
   enabled: SourceId[],
   ctx: SourceContext,
 ): Promise<SearchResult> {
-  const runs = enabled
-    .map((sid) => ALL_SOURCES[sid])
-    .filter((s) => (kind === "doi" ? s.byDoi : s.byArxiv))
-    .map((s) => settle(s.id, (kind === "doi" ? s.byDoi! : s.byArxiv!).call(s, id, ctx)));
+  const runs: Promise<{ source: SourceId; value?: Paper | null; error?: string }>[] = [];
+  for (const sid of enabled) {
+    const s = ALL_SOURCES[sid];
+    const lookup = kind === "doi" ? s.byDoi : s.byArxiv;
+    if (lookup) runs.push(settle(s.id, lookup(id, ctx)));
+  }
   const done = await Promise.all(runs);
   const lists = done.map((d) => (d.value ? [d.value] : []));
   // Crossref has no arXiv lookup, but once the DOI is known its published title and year are

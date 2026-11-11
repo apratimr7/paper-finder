@@ -1,6 +1,6 @@
 {
   "name": "paper-finder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Find research papers from scraps of information and save them as metadata-only source notes in Obsidian.",
   "main": "main.js",
   "private": true,

@@ -1,9 +1,27 @@
 import { App, Modal, normalizePath, Platform, requestUrl, TFile, TFolder } from "obsidian";
 import { isSafeUrl, linkFor, type LinkKind } from "./links";
 import type { Paper } from "./types";
+import { errorMessage } from "./util";
 
-// Node built-ins, available only in desktop Obsidian. Loaded lazily so mobile never touches them.
-declare const require: (id: string) => any;
+// The few Node built-ins used to save PDFs outside the vault (desktop only, loaded lazily).
+interface NodeFs {
+  promises: {
+    mkdir(path: string, opts: { recursive: boolean }): Promise<unknown>;
+    writeFile(path: string, data: Uint8Array, opts: { flag: string }): Promise<void>;
+  };
+}
+interface NodePath {
+  resolve(...parts: string[]): string;
+  join(...parts: string[]): string;
+  dirname(p: string): string;
+}
+interface NodeOs {
+  homedir(): string;
+}
+interface NodeUrl {
+  pathToFileURL(p: string): { href: string };
+}
+declare const require: (id: "fs" | "path" | "os" | "url") => unknown;
 
 export const PDF_LINK_KINDS: LinkKind[] = ["arxiv-pdf", "oa-pdf"];
 
@@ -72,7 +90,7 @@ export async function downloadPdf(order: LinkKind[], p: Paper, maxMB: number): P
       }
       return { url, data };
     } catch (e) {
-      errors.push(`${new URL(url).host}: ${e instanceof Error ? e.message : e}`);
+      errors.push(`${new URL(url).host}: ${errorMessage(e)}`);
     } finally {
       window.clearTimeout(timer);
     }
@@ -106,10 +124,10 @@ export async function saveInVault(app: App, folder: string, base: string, data: 
  */
 export async function saveOutside(folder: string, base: string, data: ArrayBuffer): Promise<{ absPath: string; fileUrl: string }> {
   if (!Platform.isDesktopApp) throw new Error("saving outside the vault needs desktop Obsidian");
-  const fs = require("fs").promises;
-  const path = require("path");
-  const os = require("os");
-  const { pathToFileURL } = require("url");
+  const fs = (require("fs") as NodeFs).promises;
+  const path = require("path") as NodePath;
+  const os = require("os") as NodeOs;
+  const nodeUrl = require("url") as NodeUrl;
 
   let dir = folder.trim();
   if (dir === "~" || dir.startsWith("~/") || dir.startsWith("~\\")) dir = path.join(os.homedir(), dir.slice(1));
@@ -122,9 +140,9 @@ export async function saveOutside(folder: string, base: string, data: ArrayBuffe
     try {
       // "wx": fail instead of overwriting if the file already exists.
       await fs.writeFile(abs, new Uint8Array(data), { flag: "wx" });
-      return { absPath: abs, fileUrl: pathToFileURL(abs).href };
-    } catch (e: any) {
-      if (e?.code === "EEXIST") continue;
+      return { absPath: abs, fileUrl: nodeUrl.pathToFileURL(abs).href };
+    } catch (e) {
+      if ((e as { code?: unknown } | null)?.code === "EEXIST") continue;
       throw e;
     }
   }

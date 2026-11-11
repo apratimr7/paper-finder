@@ -1,4 +1,6 @@
 // Offline checks for template rendering and file names.
+// The core uses window.setTimeout (Obsidian popout-window safety); Node has no window.
+globalThis.window ??= globalThis;
 import * as c from "./dist/core.mjs";
 const ok = (cond, m) => { console.log(cond ? "PASS" : "FAIL", m); if (!cond) process.exitCode = 1; };
 const p = { title: 'AdS/CFT: a "review" #2 \u0092 <b>bold</b> &lt;img src=x&gt;', authors: ["Juan Maldacena", "Gerard 't Hooft"], year: "1998", sources: [] };

@@ -1,8 +1,8 @@
 {
   "id": "paper-finder",
   "name": "Paper Finder",
-  "version": "0.1.0",
-  "minAppVersion": "1.8.0",
+  "version": "0.1.1",
+  "minAppVersion": "1.13.2",
   "description": "Find research papers from title words, a DOI, an arXiv ID or a URL, searching OpenAlex, arXiv, INSPIRE-HEP, Crossref and Semantic Scholar, and save them as source notes with optional PDFs.",
   "author": "Apratim Rastogi",
   "authorUrl": "https://github.com/apratimr7",

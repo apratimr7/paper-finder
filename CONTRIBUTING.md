@@ -29,6 +29,8 @@ npm run test:note   # template rendering, YAML escaping, file names (offline)
 npm run test:pdf    # PDF checks, path safety and saving outside the vault
 ```
 
+Obsidian's review runs [`eslint-plugin-obsidianmd`](https://github.com/obsidianmd/eslint-plugin) on submitted plugins. Maintainers run it before each release, so you don't need to install it. If you'd like to, install it outside this repository (it isn't a project dependency, to keep the dependency tree small) and use its recommended config.
+
 ## Code layout
 
 | Path | What it does |

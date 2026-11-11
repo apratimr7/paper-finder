@@ -63,7 +63,7 @@ export interface SourceContext {
 
 export interface Source {
   id: SourceId;
-  search(query: string, ctx: SourceContext): Promise<Paper[]>;
-  byDoi?(doi: string, ctx: SourceContext): Promise<Paper | null>;
-  byArxiv?(id: string, ctx: SourceContext): Promise<Paper | null>;
+  search: (query: string, ctx: SourceContext) => Promise<Paper[]>;
+  byDoi?: (doi: string, ctx: SourceContext) => Promise<Paper | null>;
+  byArxiv?: (id: string, ctx: SourceContext) => Promise<Paper | null>;
 }

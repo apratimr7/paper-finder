@@ -19,7 +19,7 @@ import { confirmByDoi, findPapers, type SearchResult } from "./search";
 import { openalex } from "./sources/openalex";
 import { DEFAULT_SETTINGS, PaperFinderSettingTab, type PaperFinderSettings } from "./settings";
 import type { HttpGet, Paper, SourceContext, SourceId } from "./types";
-import { normalizeArxiv, normalizeDoi, plainText, yearOf } from "./util";
+import { errorMessage, normalizeArxiv, normalizeDoi, plainText, yearOf } from "./util";
 
 const TIMEOUT_MS = 20_000;
 
@@ -88,7 +88,8 @@ export default class PaperFinderPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const data = (await this.loadData()) ?? {};
+    const raw: unknown = await this.loadData();
+    const data = (raw !== null && typeof raw === "object" ? raw : {}) as Partial<PaperFinderSettings>;
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...data,
@@ -99,6 +100,32 @@ export default class PaperFinderPlugin extends Plugin {
       openLinkOrder: Array.isArray(data.openLinkOrder) ? data.openLinkOrder : [...DEFAULT_SETTINGS.openLinkOrder],
     };
     this.cleanOrders();
+    await this.migrateApiKeys(raw);
+  }
+
+  /**
+   * Before 0.1.1, API keys were stored in plain text in data.json. Move them into Obsidian's
+   * secret storage and remove them from data.json.
+   */
+  private async migrateApiKeys(raw: unknown): Promise<void> {
+    const data = (raw !== null && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const moves: [string, "openalexSecret" | "s2Secret", string][] = [
+      ["openalexKey", "openalexSecret", "paper-finder-openalex"],
+      ["s2Key", "s2Secret", "paper-finder-semantic-scholar"],
+    ];
+    let changed = false;
+    for (const [oldKey, newKey, id] of moves) {
+      const plain = data[oldKey];
+      if (oldKey in this.settings) {
+        delete (this.settings as unknown as Record<string, unknown>)[oldKey];
+        changed = true;
+      }
+      if (typeof plain === "string" && plain.trim() && !this.settings[newKey]) {
+        this.app.secretStorage.setSecret(id, plain.trim());
+        this.settings[newKey] = id;
+      }
+    }
+    if (changed) await this.saveSettings();
   }
 
   /** Drop unknown link kinds from saved settings (e.g. after a downgrade or a hand-edited data.json). */
@@ -117,9 +144,19 @@ export default class PaperFinderPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
+  private secret(id: string): string {
+    return id ? this.app.secretStorage.getSecret(id) ?? "" : "";
+  }
+
   private ctx(): SourceContext {
     const s = this.settings;
-    return { http: obsidianHttp, mailto: s.mailto, openalexKey: s.openalexKey, s2Key: s.s2Key, limit: s.resultsPerSource };
+    return {
+      http: obsidianHttp,
+      mailto: s.mailto.trim(),
+      openalexKey: this.secret(s.openalexSecret),
+      s2Key: this.secret(s.s2Secret),
+      limit: s.resultsPerSource,
+    };
   }
 
   private enabledSources(): SourceId[] {
@@ -130,6 +167,16 @@ export default class PaperFinderPlugin extends Plugin {
     const enabled = this.enabledSources();
     if (!enabled.length) return Promise.reject(new Error("No sources are enabled in the settings"));
     return findPapers(query, enabled, { ...this.ctx(), isCancelled }, this.settings.yearMode);
+  }
+
+  /** Property names from the settings, falling back to the defaults for empty ones. */
+  private propNames(): PaperFinderSettings["props"] {
+    const out = { ...DEFAULT_SETTINGS.props };
+    for (const k of Object.keys(out) as (keyof PaperFinderSettings["props"])[]) {
+      const v = this.settings.props[k]?.trim();
+      if (v) out[k] = v;
+    }
+    return out;
   }
 
   private fm(file: TFile): Record<string, unknown> | undefined {
@@ -144,14 +191,17 @@ export default class PaperFinderPlugin extends Plugin {
     return k ? fm[k] : undefined;
   }
 
+  /** Frontmatter value as text: strings, numbers, booleans and lists of them. */
   private str(v: unknown): string {
-    if (v === undefined || v === null) return "";
-    return Array.isArray(v) ? v.map(String).join("; ") : String(v);
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return v.map((x) => this.str(x)).filter(Boolean).join("; ");
+    return "";
   }
 
   /** A note for this paper already in the vault: same DOI, same arXiv id, or same (long) title. */
   findExisting(p: Paper): TFile | null {
-    const P = this.settings.props;
+    const P = this.propNames();
     const title = normTitle(p.title);
     for (const f of this.app.vault.getMarkdownFiles()) {
       const fm = this.fm(f);
@@ -198,13 +248,13 @@ export default class PaperFinderPlugin extends Plugin {
       try {
         parseYaml(fm[1]);
       } catch (e) {
-        throw new Error(`the note template produced invalid YAML (${e instanceof Error ? e.message : e})`);
+        throw new Error(`the note template produced invalid YAML (${errorMessage(e)})`);
       }
     }
 
     const folder = normalizePath(renderFolder(this.settings.folder, vars) || "/");
     await this.ensureFolder(folder === "/" ? "" : folder);
-    const base = renderFilename(this.settings.filenameTemplate, vars);
+    const base = renderFilename(this.settings.filenameTemplate.trim() || DEFAULT_SETTINGS.filenameTemplate, vars);
     let path = normalizePath(folder === "/" ? `${base}.md` : `${folder}/${base}.md`);
     for (let n = 2; this.app.vault.getAbstractFileByPath(path); n++) {
       path = normalizePath(folder === "/" ? `${base} (${n}).md` : `${folder}/${base} (${n}).md`);
@@ -225,7 +275,7 @@ export default class PaperFinderPlugin extends Plugin {
         new Notice(`Created ${file.basename}`);
       }
     } catch (e) {
-      new Notice(`Paper Finder: could not create the note: ${e instanceof Error ? e.message : e}`);
+      new Notice(`Paper Finder: could not create the note: ${errorMessage(e)}`);
       return;
     }
     if (this.settings.openNoteAfterCreate || existing) await this.app.workspace.getLeaf(false).openFile(file);
@@ -242,13 +292,13 @@ export default class PaperFinderPlugin extends Plugin {
 
   /** Rebuild enough of a Paper from a note's properties to compute its links. */
   private paperFromNote(file: TFile): Paper {
-    const P = this.settings.props;
+    const P = this.propNames();
     const fm = this.fm(file);
     const url = this.str(this.prop(fm, P.url)).match(/https?:\/\/[^\s<>"')\]]+/)?.[0];
     const doi = normalizeDoi(this.str(this.prop(fm, P.doi))) ?? (url && /doi\.org/.test(url) ? normalizeDoi(url) : undefined);
     const arxiv = normalizeArxiv(this.str(this.prop(fm, P.arxiv))) ?? (url && /arxiv\.org/.test(url) ? normalizeArxiv(url) : undefined);
     const authorsRaw = this.prop(fm, P.authors);
-    const authors = (Array.isArray(authorsRaw) ? authorsRaw.map(String) : this.str(authorsRaw).split(/\s*;\s*/))
+    const authors = (Array.isArray(authorsRaw) ? authorsRaw.map((a) => this.str(a)) : this.str(authorsRaw).split(/\s*;\s*/))
       .map((a) => plainText(a))
       .filter(Boolean);
     return {
@@ -290,7 +340,7 @@ export default class PaperFinderPlugin extends Plugin {
         return;
       }
       const vars = templateVars(p, undefined);
-      const base = renderFilename(s.pdfFilenameTemplate || s.filenameTemplate, vars);
+      const base = renderFilename(s.pdfFilenameTemplate.trim() || s.filenameTemplate.trim() || DEFAULT_SETTINGS.filenameTemplate, vars);
       let link: string;
       let embed: string | null = null;
       let where: string;
@@ -308,11 +358,16 @@ export default class PaperFinderPlugin extends Plugin {
         embed = s.pdfEmbed ? `![[${linktext}]]` : null;
         where = pdf.path;
       }
-      if (s.pdfProperty) await this.app.fileManager.processFrontMatter(note, (fm) => (fm[s.pdfProperty] = link));
-      if (embed) await this.app.vault.process(note, (c) => insertEmbed(c, embed!));
+      if (s.pdfProperty) await this.app.fileManager.processFrontMatter(note, (fm: Record<string, unknown>) => {
+          fm[s.pdfProperty] = link;
+        });
+      if (embed) {
+        const e = embed;
+        await this.app.vault.process(note, (c) => insertEmbed(c, e));
+      }
       new Notice(`Saved PDF: ${where}`);
     } catch (e) {
-      new Notice(`Paper Finder: could not save the PDF: ${e instanceof Error ? e.message : e}`, 8000);
+      new Notice(`Paper Finder: could not save the PDF: ${errorMessage(e)}`, 8000);
     } finally {
       notice.hide();
     }
@@ -322,7 +377,7 @@ export default class PaperFinderPlugin extends Plugin {
     const p = this.paperFromNote(file);
     const url = (await firstWorkingLink(this.settings.openLinkOrder, p, obsidianHttp)) ?? p.publisherUrl;
     if (isSafeUrl(url)) await this.openUrl(url);
-    else new Notice("Paper Finder: this note has no DOI, arXiv id or link.");
+    else new Notice("Paper Finder: this note has no DOI, arXiv ID or link.");
   }
 
   citation(file: TFile, sourcePath: string): string {
@@ -331,7 +386,12 @@ export default class PaperFinderPlugin extends Plugin {
     const link = this.app.metadataCache.fileToLinktext(file, sourcePath, true);
     // Characters that would break a wikilink alias.
     const safe = (s: string) => s.replace(/[[\]|]/g, "");
-    return render(this.settings.citeTemplate.replace(/\{\{\s*link\s*\}\}/g, "\u0000LINK\u0000"), vars, safe).replace(/\u0000LINK\u0000/g, () => link);
+    // Render the parts around {{link}} and join them with the link itself, so the link is never
+    // re-interpreted as a template.
+    return (this.settings.citeTemplate.trim() || DEFAULT_SETTINGS.citeTemplate)
+      .split(/\{\{\s*link\s*\}\}/)
+      .map((part) => render(part, vars, safe))
+      .join(link);
   }
 
   async openUrl(url: string): Promise<void> {

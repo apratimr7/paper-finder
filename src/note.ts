@@ -64,7 +64,7 @@ export function render(template: string, vars: TemplateVars, map: (s: string) =>
 }
 
 // Characters that are invalid in file names on some OS, or that break Obsidian links.
-const BAD_FILENAME = /[\\/:*?"<>|#^[\]\u0000-\u001f]/g;
+const BAD_FILENAME = /[\\/:*?"<>|#^[\]\p{Cc}]/gu;
 
 export function sanitizeFilename(name: string, maxLength = 150): string {
   let s = name
@@ -102,7 +102,7 @@ export function renderFolder(template: string, vars: TemplateVars): string {
  * Values in the note body: one line, and anything that looks like an HTML tag is escaped so that
  * text from an API (e.g. "&lt;img src=…&gt;" in an abstract) can't become live HTML in the note.
  */
-const bodyValue = (s: string) => s.replace(/\s+/g, " ").replace(/<(?=[A-Za-z\/!?])/g, "\\<");
+const bodyValue = (s: string) => s.replace(/\s+/g, " ").replace(/<(?=[A-Za-z/!?])/g, "\\<");
 
 /** YAML double-quoted scalar. JSON string syntax is valid YAML. */
 export const yamlQuote = (s: string) => JSON.stringify(s.replace(/\s+/g, " "));
