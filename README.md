@@ -225,7 +225,7 @@ PDF download is **off by default**. Turn it on under *Settings → Paper Finder 
 
 ## Example setup
 
-A physics-oriented setup with custom property names, PDFs outside a Dropbox-synced vault, and one-click citations:
+A physics-oriented setup with custom property names, PDFs outside a cloud-synced vault, and one-click citations:
 
 | Setting | Value |
 |---|---|
