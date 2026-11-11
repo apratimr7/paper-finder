@@ -21,7 +21,7 @@ Paper Finder searches several free scholarly databases at once, merges the dupli
 
 No account and no reference manager are needed. Everything stays in Obsidian.
 
-> **Status:** 0.1.0, early release. Feedback and pull requests are welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+> **Status:** early release. Feedback and pull requests are welcome (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Contents
 
@@ -40,7 +40,7 @@ No account and no reference manager are needed. Everything stays in Obsidian.
 
 ## Installation
 
-Paper Finder needs **desktop Obsidian** (Windows, macOS or Linux), version 1.8 or newer. It isn't available on mobile because it uses desktop-only file access to save PDFs outside the vault.
+Paper Finder needs **desktop Obsidian** (Windows, macOS or Linux), version 1.13.2 or newer. (Version 0.1.0 of the plugin supports Obsidian 1.8 and is offered automatically on older Obsidian versions.) It isn't available on mobile because it uses desktop-only file access to save PDFs outside the vault.
 
 **From Obsidian** (once the plugin is listed in the community directory):
 1. Open *Settings → Community plugins → Browse*.
@@ -116,7 +116,7 @@ You can turn each database on or off, and set how many results each one returns 
 | Open the paper after creating its note | on | |
 | Open the new note | on | |
 
-Both link lists can be reordered, shortened and extended. Available link types: arXiv HTML, ar5iv, arXiv abstract, arXiv PDF, DOI, publisher page, open-access PDF, INSPIRE-HEP, OpenAlex, Semantic Scholar.
+Both link lists can be reordered by dragging, shortened and extended (the **+** button). Available link types: arXiv HTML, ar5iv, arXiv abstract, arXiv PDF, DOI, publisher page, open-access PDF, INSPIRE-HEP, OpenAlex, Semantic Scholar.
 
 ### PDFs
 
@@ -154,7 +154,9 @@ If your template uses other keys (e.g. `Year of Publication`), enter them here.
 | OpenAlex API key | Optional. |
 | Semantic Scholar API key | Recommended if you enable Semantic Scholar, which strictly rate-limits requests without a key. |
 
-These are stored in the plugin's `data.json` inside your vault. Don't fill them in if you publish or share your vault folder.
+API keys are kept in Obsidian's **secret storage**, not in your vault, so they don't end up in synced or shared vault folders. (Keys entered in version 0.1.0 are moved there automatically.) The contact e-mail is stored in the plugin's `data.json` in your vault.
+
+All settings can be found through the search box in Obsidian's settings.
 
 ## Note templates and placeholders
 
@@ -283,6 +285,9 @@ Requests go through Obsidian's `requestUrl`. Nothing identifying is sent unless 
 - **Three exact-pinned build tools** (Obsidian's type definitions, TypeScript and esbuild), installed with install scripts disabled. Package signatures are verified in CI.
 - **Text from APIs and web pages is never treated as HTML.** It's converted to plain text, and the plugin never uses `innerHTML`.
 - **Only `http(s)` links** are stored or opened.
+- **API responses are validated at runtime.** Every field is checked to have the expected type before it is used.
+- **API keys are kept in Obsidian's secret storage**, never in the vault.
+- The code passes Obsidian's recommended lint rules (`eslint-plugin-obsidianmd`, including type-checked `typescript-eslint` rules) with no warnings.
 
 Please report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
 

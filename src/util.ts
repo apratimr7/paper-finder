@@ -22,8 +22,9 @@ export function decodeEntities(s: string): string {
 export function plainText(s: string | undefined | null): string {
   if (!s) return "";
   return decodeEntities(String(s).replace(/<[^>]*>/g, " "))
-    // C0/C1 control characters and non-characters, which YAML forbids.
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u0084\u0086-\u009f\ufffe\uffff]/g, "")
+    .replace(/[\t\n\r]/g, " ")
+    // Remaining control characters (C0, DEL, C1) and non-characters, which YAML forbids.
+    .replace(/[\p{Cc}\ufffe\uffff]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -92,17 +93,47 @@ export function yearOf(s: string | number | undefined | null): string | undefine
   return m ? m[1] : undefined;
 }
 
+/** Message of any thrown value, for user-facing notices. */
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : typeof e === "string" ? e : "unknown error";
+}
+
 export class HttpError extends Error {
   constructor(public status: number, url: string) {
     super(`HTTP ${status} for ${new URL(url).host}`);
   }
 }
 
-export async function getJson<T = any>(http: HttpGet, url: string, headers?: Record<string, string>): Promise<T | null> {
+/** Parsed JSON from an API. Its shape is never trusted: read it with the helpers below. */
+export type Json = unknown;
+
+export async function getJson(http: HttpGet, url: string, headers?: Record<string, string>): Promise<Json> {
   const res = await http(url, { Accept: "application/json", ...headers });
   if (res.status === 404) return null;
   if (res.status < 200 || res.status >= 300) throw new HttpError(res.status, url);
-  return JSON.parse(res.text) as T;
+  return JSON.parse(res.text) as Json;
+}
+
+// Runtime-checked readers for untrusted JSON: each returns undefined (or []) if the value
+// doesn't have the expected type, so malformed API responses can't inject wrong types.
+export function obj(v: Json): Record<string, Json> | undefined {
+  return v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, Json>) : undefined;
+}
+export function arr(v: Json): Json[] {
+  return Array.isArray(v) ? (v as Json[]) : [];
+}
+export function str(v: Json): string | undefined {
+  return typeof v === "string" ? v : typeof v === "number" ? String(v) : undefined;
+}
+/** Follow a path of keys / indices: get(w, "primary_location", "source", "display_name"). */
+export function get(v: Json, ...path: (string | number)[]): Json {
+  let cur = v;
+  for (const k of path) {
+    if (typeof k === "number") cur = arr(cur)[k];
+    else cur = obj(cur)?.[k];
+    if (cur === undefined) return undefined;
+  }
+  return cur;
 }
 
 export async function getText(http: HttpGet, url: string, headers?: Record<string, string>): Promise<string | null> {
@@ -119,4 +150,4 @@ export function truncate(s: string, n: number): string {
   return (sp > n * 0.6 ? cut.slice(0, sp) : cut) + "…";
 }
 
-export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+export const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));

@@ -1,5 +1,7 @@
 // Live smoke test of the Obsidian-free core against the real APIs.
 // Run with: npm run test:live
+// The core uses window.setTimeout (Obsidian popout-window safety); Node has no window.
+globalThis.window ??= globalThis;
 import * as core from "./dist/core.mjs";
 
 const http = async (url, headers = {}) => {

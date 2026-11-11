@@ -35,7 +35,7 @@ export class FindPaperModal extends Modal {
     this.input = contentEl.createEl("input", {
       type: "text",
       cls: "paper-finder-input",
-      attr: { placeholder: "Title words, authors, year, DOI, arXiv id or URL", spellcheck: "false" },
+      attr: { placeholder: "Title words, authors, year, DOI, arXiv ID or URL", spellcheck: "false" },
     });
     this.statusEl = contentEl.createDiv({ cls: "paper-finder-status" });
     this.listEl = contentEl.createDiv({ cls: "paper-finder-results" });

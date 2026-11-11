@@ -10,6 +10,3 @@
 .paper-finder-meta { color: var(--text-normal); font-size: var(--font-ui-small); }
 .paper-finder-ids { color: var(--text-faint); font-size: var(--font-ui-smaller); font-family: var(--font-monospace); }
 .paper-finder-abstract { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: var(--size-2-1); }
-.paper-finder-order-item { padding-left: var(--size-4-6); border-top: none; }
-.paper-finder-template-setting { flex-wrap: wrap; }
-.paper-finder-template-text { width: 100%; font-family: var(--font-monospace); font-size: var(--font-ui-smaller); }
